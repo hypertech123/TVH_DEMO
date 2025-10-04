@@ -7,6 +7,7 @@ from typing import List
 
 from google.adk.tools.tool_context import ToolContext
 from vertexai import rag
+import vertexai
 
 from ..config import (
     DEFAULT_CHUNK_OVERLAP,
@@ -67,7 +68,7 @@ def add_data(
 
         # Check for Google Docs/Sheets/Slides URLs and convert them to Drive format
         docs_match = re.match(
-            r"https:\/\/docs\.google\.com\/(?:document|spreadsheets|presentation)\/d\/([a-zA-Z0-9_-]+)(?:\/|$)",
+            r"https:\/\/docs\.google\.com\/(?:document|spreadsheets|presentation|file|PDF|pdf)\/d\/([a-zA-Z0-9_-]+)(?:\/|$)",
             path,
         )
         if docs_match:
@@ -111,7 +112,38 @@ def add_data(
     try:
         # Get the corpus resource name
         corpus_resource_name = get_corpus_resource_name(corpus_name)
+        CUSTOM_PARSING_PROMPT = """
+        You are parsing a TVH Labels & Decals catalog. Extract structured product data from each product block accurately. 
+        Return clean JSON objects for each product using this schema:
 
+        {
+          "category": "",
+          "reference": "",
+          "foreground_color": "",
+          "background_color": "",
+          "dimensions": {"width": "", "height": "", "diameter": ""},
+          "page_number": "",
+          "url": "",
+          "notes": ""
+        }
+
+        Guidelines:
+        - Each product block has details like colors, dimensions, reference code (e.g., 138TA2835), and a TVH URL.
+        - Detect category from headings (e.g., "caTegOry: dashbOard - arrOws") and apply it to all products until the next heading.
+        - Extract foreground/background colors and normalize to uppercase.
+        - Extract dimensions and keep units (e.g., "120 mm").
+        - Extract reference codes exactly as shown.
+        - Extract URLs exactly.
+        - Include page numbers if available.
+        - Capture notes like "OLD VERSION replaced by 138TA8294" if present.
+        - Ignore multilingual disclaimers and repeated footers.
+        - Return only valid JSON array of product objects. Do not summarize.
+        """
+        llm_parser_config = rag.LlmParserConfig(
+            model_name="gemini-2.5-flash",
+            max_parsing_requests_per_min=60,
+            custom_parsing_prompt=CUSTOM_PARSING_PROMPT,
+        )
         # Set up chunking configuration
         transformation_config = rag.TransformationConfig(
             chunking_config=rag.ChunkingConfig(
@@ -120,10 +152,13 @@ def add_data(
             ),
         )
 
+
         # Import files to the corpus
         import_result = rag.import_files(
+
             corpus_resource_name,
             validated_paths,
+            llm_parser=llm_parser_config,
             transformation_config=transformation_config,
             max_embedding_requests_per_min=DEFAULT_EMBEDDING_REQUESTS_PER_MIN,
         )
