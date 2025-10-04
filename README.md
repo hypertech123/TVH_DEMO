@@ -4,6 +4,8 @@ This repository contains a Google Agent Development Kit (ADK) implementation of 
 
 ## Overview
 
+This implementation uses **multi-modal RAG** (Retrieval Augmented Generation), where document parsing is powered by **LLM Parse** for enhanced understanding of complex document structures and multimodal content.
+
 The Vertex AI RAG Agent allows you to:
 
 - Query document corpora with natural language questions
